@@ -1,0 +1,1274 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sorteo BCR · Bolsa de Comercio de Rosario</title>
+
+<!--
+  ══════════════════════════════════════════════════════════════════════════
+  SORTEO BCR — aplicación de sorteo para las reuniones mensuales con socios.
+  100% client-side: no hay backend ni base de datos. Los nombres pegados
+  nunca salen del navegador de quien la usa (no se envían a ningún servidor).
+
+  CÓMO USARLA
+  1) Subí este archivo a un repo de GitHub (podés renombrarlo a index.html
+     para que sea la página principal de un GitHub Pages).
+  2) Reemplazá "logo-bcr.png" por tu isotipo real, en la misma carpeta que
+     este archivo. Si no lo agregás, se muestra un texto de reemplazo.
+  3) Abrí el archivo (o la URL de GitHub Pages).
+
+  FLUJO
+  Vista de preparación (pasos 1-2-3): cargás participantes, configurás el
+  sorteo y lo guardás con un nombre (ej. "Prueba 1"). Queda en la lista de
+  "Sorteos guardados". Click en "Sorteo en vivo →" te lleva a una vista
+  aparte, con solo el botón de sorteo, pensada para proyectar en la reunión.
+
+  SUPUESTO DE DISEÑO: no se usa localStorage ni ninguna persistencia
+  automática del navegador (los sorteos guardados viven solo en la memoria
+  de la pestaña). Para no perder la preparación entre sesiones, usá
+  "Exportar todos los sorteos guardados (.json)" antes de cerrar la
+  pestaña, e "Importar" para recuperarlos.
+  ══════════════════════════════════════════════════════════════════════════
+-->
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Literata:ital,wght@0,400;0,600;0,700;1,400&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<style>
+  :root{
+    --navy:#002E5F;
+    --navy-dark:#001d3f;
+    --navy-soft:#e9eef5;
+    --gold:#d8940e;
+    --gold-soft:#fdf1da;
+    --green:#40742a;
+    --ink:#1f2937;
+    --gray:#5b6472;
+    --line:#dde3ea;
+    --paper:#eef1f5;
+  }
+
+  *{ box-sizing:border-box; }
+
+  body{
+    margin:0;
+    padding:0;
+    background:var(--paper);
+    font-family:'IBM Plex Sans', Arial, Helvetica, sans-serif;
+    color:var(--ink);
+  }
+
+  .page{
+    max-width:760px;
+    margin:0 auto;
+    padding:36px 20px 70px;
+  }
+
+  /* ── Masthead ─────────────────────────────────────────────────────── */
+  .masthead{
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-end;
+    gap:20px;
+    padding-bottom:20px;
+    border-bottom:2px solid var(--navy);
+    margin-bottom:30px;
+  }
+  .masthead-kicker{
+    font-size:11px;
+    font-weight:600;
+    letter-spacing:1.5px;
+    text-transform:uppercase;
+    color:var(--gray);
+  }
+  .masthead h1{
+    font-family:'Literata', Georgia, serif;
+    font-weight:700;
+    font-size:30px;
+    color:var(--navy);
+    margin:6px 0 0;
+    line-height:1.15;
+    word-break:break-word;
+  }
+  .masthead-sub{
+    font-size:13px;
+    color:var(--gray);
+    margin-top:6px;
+  }
+  .brand{
+    display:flex;
+    align-items:center;
+    flex-shrink:0;
+  }
+  .brand-logo{
+    height:50px;
+    display:block;
+  }
+  .brand-fallback{
+    display:none;
+    flex-direction:column;
+    align-items:flex-end;
+    font-family:'IBM Plex Sans', sans-serif;
+    font-weight:700;
+    font-size:11.5px;
+    letter-spacing:0.4px;
+    color:var(--navy);
+    line-height:1.4;
+    text-align:right;
+    border:1.5px solid var(--navy);
+    border-radius:8px;
+    padding:6px 10px;
+  }
+
+  /* ── Cards ────────────────────────────────────────────────────────── */
+  .card{
+    background:#ffffff;
+    border:1px solid var(--line);
+    border-radius:16px;
+    box-shadow:0 1px 3px rgba(0,46,95,0.07);
+    padding:26px 28px 28px;
+    margin-bottom:22px;
+  }
+  .card-header{
+    display:flex;
+    align-items:center;
+    gap:12px;
+    margin-bottom:6px;
+  }
+  .step-chip{
+    width:26px;
+    height:26px;
+    border-radius:50%;
+    background:var(--navy);
+    color:#fff;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-weight:600;
+    font-size:12.5px;
+    flex-shrink:0;
+  }
+  .card-title{
+    font-family:'Literata', Georgia, serif;
+    font-weight:700;
+    font-size:18.5px;
+    color:var(--navy);
+    margin:0;
+  }
+  .card-hint{
+    font-size:12.5px;
+    color:var(--gray);
+    margin:2px 0 18px 38px;
+    line-height:1.5;
+  }
+
+  label{
+    display:block;
+    font-size:12.5px;
+    font-weight:600;
+    color:var(--gray);
+    margin-bottom:6px;
+  }
+
+  textarea{
+    width:100%;
+    min-height:150px;
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:12px 14px;
+    font-family:'IBM Plex Sans', sans-serif;
+    font-size:13.5px;
+    line-height:1.6;
+    resize:vertical;
+    color:var(--ink);
+  }
+  textarea:focus, input:focus, button:focus{
+    outline:2px solid var(--gold);
+    outline-offset:1px;
+  }
+
+  .row{
+    display:flex;
+    flex-wrap:wrap;
+    gap:14px;
+    align-items:center;
+    margin-top:14px;
+  }
+  .checkline{
+    display:flex;
+    align-items:center;
+    gap:7px;
+    font-size:13px;
+    color:var(--ink);
+  }
+  .checkline input{ margin:0; }
+
+  input[type="text"], input[type="number"]{
+    border:1px solid var(--line);
+    border-radius:8px;
+    padding:9px 11px;
+    font-family:'IBM Plex Sans', sans-serif;
+    font-size:13.5px;
+    color:var(--ink);
+  }
+  input[type="number"]{ width:80px; }
+
+  .field{ margin-bottom:16px; }
+  .field:last-child{ margin-bottom:0; }
+
+  .count-badge{
+    display:inline-block;
+    background:var(--navy-soft);
+    color:var(--navy);
+    font-size:12.5px;
+    font-weight:600;
+    padding:4px 10px;
+    border-radius:20px;
+  }
+
+  /* ── Buttons ──────────────────────────────────────────────────────── */
+  button{
+    font-family:'IBM Plex Sans', sans-serif;
+    cursor:pointer;
+    border:none;
+  }
+  .btn-primary{
+    background:var(--navy);
+    color:#fff;
+    font-weight:600;
+    font-size:14px;
+    padding:11px 20px;
+    border-radius:8px;
+  }
+  .btn-primary:hover{ background:var(--navy-dark); }
+  .btn-primary:disabled{
+    background:#a9b6c8;
+    cursor:not-allowed;
+  }
+  .btn-small{
+    font-size:12.5px;
+    padding:8px 14px;
+  }
+  .btn-secondary{
+    background:#fff;
+    color:var(--navy);
+    border:1.5px solid var(--navy);
+    font-weight:600;
+    font-size:13px;
+    padding:9px 16px;
+    border-radius:8px;
+  }
+  .btn-secondary:hover{ background:var(--navy-soft); }
+  .btn-text{
+    background:none;
+    color:var(--navy);
+    font-size:12.5px;
+    font-weight:600;
+    text-decoration:underline;
+    padding:4px 0;
+  }
+  .btn-danger-text{
+    background:none;
+    color:#8a3b3b;
+    font-size:12.5px;
+    font-weight:600;
+    text-decoration:underline;
+    padding:4px 0;
+  }
+  .btn-back{
+    background:none;
+    color:var(--navy);
+    font-size:13px;
+    font-weight:600;
+    text-decoration:underline;
+    padding:6px 0;
+  }
+
+  .draw-btn-wrap{ text-align:center; margin:8px 0 22px; }
+  .btn-draw{
+    background:var(--navy);
+    color:#fff;
+    font-family:'Literata', Georgia, serif;
+    font-weight:700;
+    font-size:19px;
+    padding:16px 40px;
+    border-radius:12px;
+    letter-spacing:0.3px;
+  }
+  .btn-draw:hover{ background:var(--navy-dark); }
+  .btn-draw:disabled{
+    background:#a9b6c8;
+    cursor:not-allowed;
+  }
+
+  /* ── Participant list ─────────────────────────────────────────────── */
+  .list-box{
+    margin-top:14px;
+    max-height:230px;
+    overflow-y:auto;
+    border:1px solid var(--line);
+    border-radius:10px;
+  }
+  .list-box ol{
+    margin:0;
+    padding:0;
+    list-style:none;
+    counter-reset:item;
+  }
+  .list-box li{
+    counter-increment:item;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:8px 12px;
+    font-size:13.5px;
+    border-bottom:1px solid var(--line);
+  }
+  .list-box li:last-child{ border-bottom:none; }
+  .list-box li::before{
+    content:counter(item) ".";
+    color:var(--gray);
+    font-weight:600;
+    margin-right:10px;
+    min-width:22px;
+    flex-shrink:0;
+  }
+  .li-name{ flex:1; word-break:break-word; }
+  .li-remove{
+    background:none;
+    color:var(--gray);
+    font-size:15px;
+    line-height:1;
+    padding:2px 6px;
+    border-radius:6px;
+    flex-shrink:0;
+  }
+  .li-remove:hover{ background:#f4e3e3; color:#8a3b3b; }
+  .empty-note{
+    padding:16px 12px;
+    font-size:13px;
+    color:var(--gray);
+    font-style:italic;
+    text-align:center;
+  }
+
+  .manual-add{
+    display:flex;
+    gap:8px;
+    margin-top:12px;
+  }
+  .manual-add input{ flex:1; }
+
+  /* ── Sorteos guardados ────────────────────────────────────────────── */
+  .saved-empty{
+    padding:16px 12px;
+    font-size:13px;
+    color:var(--gray);
+    font-style:italic;
+    text-align:center;
+    border:1px dashed var(--line);
+    border-radius:10px;
+  }
+  .saved-list{
+    list-style:none;
+    margin:0;
+    padding:0;
+    border:1px solid var(--line);
+    border-radius:10px;
+    overflow:hidden;
+  }
+  .saved-item{
+    display:flex;
+    flex-wrap:wrap;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    padding:14px 16px;
+    border-bottom:1px solid var(--line);
+  }
+  .saved-item:last-child{ border-bottom:none; }
+  .saved-info{ min-width:160px; }
+  .saved-name{
+    font-family:'Literata', Georgia, serif;
+    font-weight:700;
+    font-size:15.5px;
+    color:var(--navy);
+    word-break:break-word;
+  }
+  .saved-meta{
+    font-size:12px;
+    color:var(--gray);
+    margin-top:2px;
+  }
+  .saved-actions{
+    display:flex;
+    align-items:center;
+    gap:14px;
+    flex-wrap:wrap;
+  }
+
+  /* ── Reveal / draw area ───────────────────────────────────────────── */
+  .reveal-box{
+    min-height:110px;
+    border-radius:14px;
+    background:var(--navy-soft);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    text-align:center;
+    padding:20px;
+    font-family:'Literata', Georgia, serif;
+    font-weight:700;
+    font-size:clamp(18px, 4vw, 28px);
+    color:var(--navy);
+    transition:background 0.25s ease;
+  }
+  .reveal-box.spinning{
+    background:linear-gradient(135deg, var(--navy-soft), var(--gold-soft));
+  }
+  @keyframes pulseDots{ 0%,100%{ opacity:0.55; } 50%{ opacity:1; } }
+  .reveal-box.anticipating{
+    animation:pulseDots 0.65s ease-in-out infinite;
+  }
+  .reveal-placeholder{
+    font-family:'IBM Plex Sans', sans-serif;
+    font-weight:400;
+    font-size:14px;
+    color:var(--gray);
+  }
+
+  .winner-card{
+    margin-top:18px;
+    border:2px solid var(--gold);
+    background:var(--gold-soft);
+    border-radius:14px;
+    padding:22px;
+    text-align:center;
+    opacity:0;
+    transform:scale(0.96);
+    transition:opacity 0.4s ease, transform 0.4s ease;
+  }
+  .winner-card.show{ opacity:1; transform:scale(1); }
+  .winner-label{
+    font-size:11.5px;
+    font-weight:700;
+    letter-spacing:1.5px;
+    text-transform:uppercase;
+    color:#9a6b06;
+  }
+  .winner-name{
+    font-family:'Literata', Georgia, serif;
+    font-weight:700;
+    font-size:29px;
+    color:var(--navy);
+    margin-top:6px;
+    word-break:break-word;
+  }
+
+  .subs-wrap{
+    margin-top:16px;
+    opacity:0;
+    transition:opacity 0.4s ease 0.2s;
+  }
+  .subs-wrap.show{ opacity:1; }
+  .subs-title{
+    font-size:12px;
+    font-weight:700;
+    letter-spacing:0.8px;
+    text-transform:uppercase;
+    color:var(--gray);
+    margin-bottom:8px;
+  }
+  .subs-wrap ol{
+    margin:0;
+    padding-left:20px;
+    font-size:14px;
+    line-height:1.9;
+    color:var(--ink);
+  }
+  .subs-wrap li::marker{
+    font-weight:700;
+    color:var(--navy);
+  }
+
+  .draw-actions{
+    display:flex;
+    flex-wrap:wrap;
+    gap:16px;
+    align-items:center;
+    justify-content:center;
+    margin-top:18px;
+  }
+
+  .redo-note{
+    font-size:11.5px;
+    color:var(--gray);
+    text-align:center;
+    margin-top:6px;
+  }
+
+  footer{
+    text-align:center;
+    font-size:12px;
+    color:var(--gray);
+    font-style:italic;
+    margin-top:8px;
+  }
+
+  #importFile, #importAllFile{ display:none; }
+
+  /* ── Toast de estado (compartido entre las dos vistas) ───────────── */
+  .status-toast{
+    position:fixed;
+    left:50%;
+    bottom:22px;
+    transform:translateX(-50%) translateY(16px);
+    background:var(--navy);
+    color:#fff;
+    font-size:13.5px;
+    font-weight:600;
+    padding:12px 20px;
+    border-radius:10px;
+    box-shadow:0 6px 18px rgba(0,30,60,0.25);
+    opacity:0;
+    pointer-events:none;
+    transition:opacity 0.25s ease, transform 0.25s ease;
+    z-index:80;
+    max-width:88%;
+    text-align:center;
+  }
+  .status-toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+  .status-toast.warn{ background:#8a3b3b; }
+
+  @media (prefers-reduced-motion: reduce){
+    .reveal-box, .winner-card, .subs-wrap, .status-toast{ transition:none !important; }
+    .reveal-box.anticipating{ animation:none !important; }
+  }
+
+  @media (max-width:560px){
+    .masthead{ flex-direction:column; align-items:flex-start; }
+    .brand{ align-self:flex-end; margin-top:-40px; }
+    .card{ padding:20px; }
+    .saved-item{ flex-direction:column; align-items:flex-start; }
+    .saved-actions{ width:100%; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- ═══════════════════════ VISTA DE PREPARACIÓN ═══════════════════════ -->
+  <div id="setupView">
+
+    <header class="masthead">
+      <div>
+        <div class="masthead-kicker">Dirección de Informática y Estudios Económicos</div>
+        <h1>Sorteo de socios</h1>
+        <div class="masthead-sub">Reunión mensual con socios · Bolsa de Comercio de Rosario</div>
+      </div>
+      <div class="brand">
+        <img class="brand-logo" src="logo-bcr.png" alt="Bolsa de Comercio de Rosario"
+             onerror="this.style.display='none'; document.getElementById('logoFallback').style.display='flex';">
+        <div class="brand-fallback" id="logoFallback">BOLSA<br>DE COMERCIO<br>DE ROSARIO</div>
+      </div>
+    </header>
+
+    <!-- ══ Paso 1: Participantes ══ -->
+    <section class="card">
+      <div class="card-header">
+        <div class="step-chip">1</div>
+        <h2 class="card-title">Participantes</h2>
+      </div>
+      <div class="card-hint">Pegá la lista de inscriptos (un nombre por línea, tal como sale del .txt).</div>
+
+      <div class="field">
+        <label for="participantsInput">Lista de inscriptos</label>
+        <textarea id="participantsInput" placeholder="Juan Pérez&#10;María Gómez&#10;Carlos Ibáñez&#10;..."></textarea>
+      </div>
+
+      <div class="row">
+        <label class="checkline"><input type="checkbox" id="dedupeToggle" checked> Quitar duplicados</label>
+        <label class="checkline"><input type="checkbox" id="stripNumberingToggle" checked> Quitar numeración inicial (1., 2), etc.)</label>
+      </div>
+
+      <div class="row">
+        <button type="button" class="btn-primary" id="btnLoad">Cargar participantes</button>
+        <span class="count-badge" id="participantCount">0 participantes cargados</span>
+      </div>
+
+      <div class="list-box" id="listBoxWrap">
+        <div class="empty-note" id="emptyNote">Todavía no cargaste participantes.</div>
+        <ol id="participantList" style="display:none;"></ol>
+      </div>
+
+      <div class="manual-add">
+        <input type="text" id="manualAddInput" placeholder="Agregar un participante suelto (inscripción de último momento)">
+        <button type="button" class="btn-secondary" id="btnManualAdd">Agregar</button>
+      </div>
+
+      <div class="row">
+        <button type="button" class="btn-text" id="btnClearParticipants">Vaciar lista de participantes</button>
+      </div>
+    </section>
+
+    <!-- ══ Paso 2: Configuración ══ -->
+    <section class="card">
+      <div class="card-header">
+        <div class="step-chip">2</div>
+        <h2 class="card-title">Configuración del sorteo</h2>
+      </div>
+      <div class="card-hint">Ponele un nombre al sorteo (lo vas a usar para identificarlo en el paso 3) y definí los suplentes.</div>
+
+      <div class="field">
+        <label for="eventName">Nombre del sorteo</label>
+        <input type="text" id="eventName" placeholder="Ej: Prueba 1 / Reunión de socios – julio 2026" style="width:100%;">
+      </div>
+
+      <div class="field">
+        <label for="numSuplentes">Cantidad de suplentes a sortear</label>
+        <input type="number" id="numSuplentes" min="0" max="20" value="2">
+      </div>
+
+      <div class="row">
+        <button type="button" class="btn-secondary" id="btnExport">Exportar este sorteo (.json)</button>
+        <button type="button" class="btn-secondary" id="btnImportTrigger">Importar un sorteo (.json)</button>
+        <input type="file" id="importFile" accept="application/json,.json">
+      </div>
+    </section>
+
+    <!-- ══ Paso 3: Guardar y elegir sorteo ══ -->
+    <section class="card">
+      <div class="card-header">
+        <div class="step-chip">3</div>
+        <h2 class="card-title">Guardar y elegir sorteo</h2>
+      </div>
+      <div class="card-hint">Guardá esta configuración con su nombre. Después, con un click en "Sorteo en vivo →" pasás a la vista de sorteo, lista para proyectar.</div>
+
+      <div class="row">
+        <button type="button" class="btn-primary" id="btnSaveRaffle">Guardar sorteo</button>
+        <button type="button" class="btn-text" id="btnClearForm">Vaciar formulario</button>
+      </div>
+
+      <div style="margin-top:20px;">
+        <div class="saved-empty" id="savedEmpty">Todavía no guardaste ningún sorteo.</div>
+        <ul class="saved-list" id="savedList" style="display:none;"></ul>
+      </div>
+
+      <div class="row">
+        <button type="button" class="btn-secondary" id="btnExportAll">Exportar todos los sorteos guardados (.json)</button>
+        <button type="button" class="btn-secondary" id="btnImportAllTrigger">Importar sorteos guardados (.json)</button>
+        <input type="file" id="importAllFile" accept="application/json,.json">
+      </div>
+      <div class="card-hint" style="margin-left:0; margin-top:10px;">Esta lista vive solo en esta pestaña: si la cerrás sin exportar, se pierde. Exportala antes de cerrar si querés conservarla o pasarla a otra computadora.</div>
+    </section>
+
+    <footer>Bolsa de Comercio de Rosario · Aplicación interna de sorteos · los datos no salen de este navegador</footer>
+  </div>
+
+  <!-- ═══════════════════════ VISTA DE SORTEO EN VIVO ═══════════════════════ -->
+  <div id="liveView" style="display:none;">
+
+    <div style="margin-bottom:14px;">
+      <button type="button" class="btn-back" id="btnBackToSetup">← Volver a preparar sorteos</button>
+    </div>
+
+    <header class="masthead">
+      <div>
+        <div class="masthead-kicker">Sorteo en vivo</div>
+        <h1 id="liveRaffleTitle">—</h1>
+        <div class="masthead-sub" id="liveRaffleMeta">—</div>
+      </div>
+      <div class="brand">
+        <img class="brand-logo" src="logo-bcr.png" alt="Bolsa de Comercio de Rosario"
+             onerror="this.style.display='none'; document.getElementById('logoFallbackLive').style.display='flex';">
+        <div class="brand-fallback" id="logoFallbackLive">BOLSA<br>DE COMERCIO<br>DE ROSARIO</div>
+      </div>
+    </header>
+
+    <section class="card">
+      <div class="draw-btn-wrap">
+        <button type="button" class="btn-draw" id="btnDraw">🎉 Realizar sorteo</button>
+      </div>
+
+      <div class="reveal-box" id="revealBox">
+        <span class="reveal-placeholder">Preparando…</span>
+      </div>
+
+      <div class="winner-card" id="winnerCard">
+        <div class="winner-label">Ganador/a</div>
+        <div class="winner-name" id="winnerName">—</div>
+      </div>
+
+      <div class="subs-wrap" id="subsWrap">
+        <div class="subs-title">Suplentes, en orden</div>
+        <ol id="substitutesList"></ol>
+      </div>
+
+      <div class="draw-actions">
+        <button type="button" class="btn-secondary" id="btnCopyResult" style="display:none;">Copiar resultado</button>
+        <button type="button" class="btn-text" id="btnRedoDraw" style="display:none;">Repetir con los mismos participantes</button>
+      </div>
+      <div class="redo-note" id="redoNote" style="display:none;">Usalo solo para probar antes del evento real: repetir el sorteo genera otro ganador.</div>
+    </section>
+
+    <footer>Bolsa de Comercio de Rosario · Aplicación interna de sorteos</footer>
+  </div>
+
+</div>
+
+<div class="status-toast" id="statusBar" role="status" aria-live="polite"></div>
+
+<script>
+(function(){
+  'use strict';
+
+  // ── Estado ───────────────────────────────────────────────────────────
+  var participants = [];       // lista de trabajo del formulario (paso 1)
+  var savedRaffles = [];       // [{ name, participants, numSuplentes }]
+  var activeLiveRaffle = null; // sorteo actualmente abierto en la vista en vivo
+  var lastDraw = null;         // { winner, substitutes } del último sorteo realizado
+  var isDrawing = false;
+
+  // ── Elementos: vista de preparación ─────────────────────────────────
+  var setupView = document.getElementById('setupView');
+  var liveView = document.getElementById('liveView');
+
+  var participantsInput = document.getElementById('participantsInput');
+  var dedupeToggle = document.getElementById('dedupeToggle');
+  var stripNumberingToggle = document.getElementById('stripNumberingToggle');
+  var btnLoad = document.getElementById('btnLoad');
+  var participantCount = document.getElementById('participantCount');
+  var participantList = document.getElementById('participantList');
+  var emptyNote = document.getElementById('emptyNote');
+  var manualAddInput = document.getElementById('manualAddInput');
+  var btnManualAdd = document.getElementById('btnManualAdd');
+  var btnClearParticipants = document.getElementById('btnClearParticipants');
+
+  var eventNameInput = document.getElementById('eventName');
+  var numSuplentesInput = document.getElementById('numSuplentes');
+  var btnExport = document.getElementById('btnExport');
+  var btnImportTrigger = document.getElementById('btnImportTrigger');
+  var importFile = document.getElementById('importFile');
+
+  var btnSaveRaffle = document.getElementById('btnSaveRaffle');
+  var btnClearForm = document.getElementById('btnClearForm');
+  var savedEmpty = document.getElementById('savedEmpty');
+  var savedList = document.getElementById('savedList');
+  var btnExportAll = document.getElementById('btnExportAll');
+  var btnImportAllTrigger = document.getElementById('btnImportAllTrigger');
+  var importAllFile = document.getElementById('importAllFile');
+
+  // ── Elementos: vista de sorteo en vivo ──────────────────────────────
+  var btnBackToSetup = document.getElementById('btnBackToSetup');
+  var liveRaffleTitle = document.getElementById('liveRaffleTitle');
+  var liveRaffleMeta = document.getElementById('liveRaffleMeta');
+  var btnDraw = document.getElementById('btnDraw');
+  var revealBox = document.getElementById('revealBox');
+  var winnerCard = document.getElementById('winnerCard');
+  var winnerName = document.getElementById('winnerName');
+  var subsWrap = document.getElementById('subsWrap');
+  var substitutesList = document.getElementById('substitutesList');
+  var btnCopyResult = document.getElementById('btnCopyResult');
+  var btnRedoDraw = document.getElementById('btnRedoDraw');
+  var redoNote = document.getElementById('redoNote');
+
+  var statusBar = document.getElementById('statusBar');
+
+  var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // ── Utilidades generales ─────────────────────────────────────────────
+  function showStatus(msg, isWarn){
+    statusBar.textContent = msg;
+    statusBar.className = 'status-toast show' + (isWarn ? ' warn' : '');
+    window.clearTimeout(showStatus._t);
+    showStatus._t = window.setTimeout(function(){
+      statusBar.className = 'status-toast';
+    }, 4500);
+  }
+
+  function slugify(name){
+    return (name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+  }
+
+  function downloadJSON(obj, filename){
+    var blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  function readJSONFile(file, cb){
+    var reader = new FileReader();
+    reader.onload = function(){
+      try{
+        cb(null, JSON.parse(reader.result));
+      } catch (err){
+        cb(err);
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  function shuffle(arr){
+    var a = arr.slice();
+    for (var i = a.length - 1; i > 0; i--){
+      var j = Math.floor(Math.random() * (i + 1));
+      var tmp = a[i]; a[i] = a[j]; a[j] = tmp;
+    }
+    return a;
+  }
+
+  // ── Paso 1: participantes ────────────────────────────────────────────
+  function parseParticipants(raw, opts){
+    var lines = raw.split(/\r?\n/).map(function(l){ return l.trim(); }).filter(function(l){ return l.length > 0; });
+    if (opts.stripNumbering){
+      lines = lines.map(function(l){ return l.replace(/^\s*\d+[\.\)\-]\s*/, '').trim(); }).filter(function(l){ return l.length > 0; });
+    }
+    if (opts.dedupe){
+      var seen = {};
+      var out = [];
+      lines.forEach(function(l){
+        var key = l.toLowerCase();
+        if (!seen[key]){
+          seen[key] = true;
+          out.push(l);
+        }
+      });
+      lines = out;
+    }
+    return lines;
+  }
+
+  function renderParticipants(){
+    participantCount.textContent = participants.length + (participants.length === 1 ? ' participante cargado' : ' participantes cargados');
+    participantList.innerHTML = '';
+
+    if (participants.length === 0){
+      emptyNote.style.display = 'block';
+      participantList.style.display = 'none';
+      return;
+    }
+
+    emptyNote.style.display = 'none';
+    participantList.style.display = '';
+    participants.forEach(function(name, idx){
+      var li = document.createElement('li');
+      var span = document.createElement('span');
+      span.className = 'li-name';
+      span.textContent = name;
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'li-remove';
+      btn.setAttribute('aria-label', 'Quitar a ' + name);
+      btn.textContent = '\u00D7';
+      btn.addEventListener('click', function(){
+        participants.splice(idx, 1);
+        renderParticipants();
+      });
+      li.appendChild(span);
+      li.appendChild(btn);
+      participantList.appendChild(li);
+    });
+  }
+
+  btnLoad.addEventListener('click', function(){
+    var parsed = parseParticipants(participantsInput.value, {
+      dedupe: dedupeToggle.checked,
+      stripNumbering: stripNumberingToggle.checked
+    });
+    if (parsed.length === 0){
+      showStatus('No se encontró ningún nombre válido en el texto pegado.', true);
+      return;
+    }
+    participants = parsed;
+    renderParticipants();
+    showStatus('Se cargaron ' + participants.length + ' participantes.');
+  });
+
+  btnManualAdd.addEventListener('click', function(){
+    var name = manualAddInput.value.trim();
+    if (!name) return;
+    if (dedupeToggle.checked && participants.some(function(p){ return p.toLowerCase() === name.toLowerCase(); })){
+      showStatus('Ese nombre ya está en la lista.', true);
+      return;
+    }
+    participants.push(name);
+    manualAddInput.value = '';
+    renderParticipants();
+  });
+  manualAddInput.addEventListener('keydown', function(e){
+    if (e.key === 'Enter'){ e.preventDefault(); btnManualAdd.click(); }
+  });
+
+  btnClearParticipants.addEventListener('click', function(){
+    if (participants.length === 0) return;
+    participants = [];
+    renderParticipants();
+    showStatus('Se vació la lista de participantes.');
+  });
+
+  // ── Paso 2: exportar / importar un sorteo suelto ─────────────────────
+  btnExport.addEventListener('click', function(){
+    var data = {
+      eventName: eventNameInput.value.trim(),
+      numSuplentes: parseInt(numSuplentesInput.value, 10) || 0,
+      participants: participants
+    };
+    var safeName = slugify(data.eventName || 'sorteo-bcr');
+    downloadJSON(data, (safeName || 'sorteo-bcr') + '.json');
+    showStatus('Sorteo exportado.');
+  });
+
+  btnImportTrigger.addEventListener('click', function(){ importFile.click(); });
+  importFile.addEventListener('change', function(){
+    var file = importFile.files[0];
+    if (!file) return;
+    readJSONFile(file, function(err, data){
+      if (err){
+        showStatus('El archivo no tiene un formato válido.', true);
+        return;
+      }
+      eventNameInput.value = data.eventName || '';
+      numSuplentesInput.value = (typeof data.numSuplentes === 'number') ? data.numSuplentes : 2;
+      participants = Array.isArray(data.participants) ? data.participants : [];
+      participantsInput.value = participants.join('\n');
+      renderParticipants();
+      showStatus('Sorteo importado: ' + participants.length + ' participantes.');
+    });
+    importFile.value = '';
+  });
+
+  // ── Paso 3: guardar sorteo y lista de sorteos guardados ──────────────
+  function renderSavedRaffles(){
+    if (savedRaffles.length === 0){
+      savedEmpty.style.display = 'block';
+      savedList.style.display = 'none';
+      savedList.innerHTML = '';
+      return;
+    }
+    savedEmpty.style.display = 'none';
+    savedList.style.display = '';
+    savedList.innerHTML = '';
+
+    savedRaffles.forEach(function(raffle, idx){
+      var li = document.createElement('li');
+      li.className = 'saved-item';
+
+      var info = document.createElement('div');
+      info.className = 'saved-info';
+      var title = document.createElement('div');
+      title.className = 'saved-name';
+      title.textContent = raffle.name;
+      var supCount = Math.min(raffle.numSuplentes, Math.max(raffle.participants.length - 1, 0));
+      var meta = document.createElement('div');
+      meta.className = 'saved-meta';
+      meta.textContent = raffle.participants.length + (raffle.participants.length === 1 ? ' participante · ' : ' participantes · ') +
+        supCount + (supCount === 1 ? ' suplente' : ' suplentes');
+      info.appendChild(title);
+      info.appendChild(meta);
+
+      var actions = document.createElement('div');
+      actions.className = 'saved-actions';
+
+      var goBtn = document.createElement('button');
+      goBtn.type = 'button';
+      goBtn.className = 'btn-primary btn-small';
+      goBtn.textContent = 'Sorteo en vivo →';
+      goBtn.addEventListener('click', function(){ enterLiveView(raffle); });
+
+      var editBtn = document.createElement('button');
+      editBtn.type = 'button';
+      editBtn.className = 'btn-text';
+      editBtn.textContent = 'Editar';
+      editBtn.addEventListener('click', function(){ loadForEditing(raffle); });
+
+      var delBtn = document.createElement('button');
+      delBtn.type = 'button';
+      delBtn.className = 'btn-danger-text';
+      delBtn.textContent = 'Eliminar';
+      delBtn.addEventListener('click', function(){
+        if (window.confirm('¿Eliminar el sorteo guardado "' + raffle.name + '"?')){
+          savedRaffles.splice(idx, 1);
+          renderSavedRaffles();
+          showStatus('Se eliminó "' + raffle.name + '".');
+        }
+      });
+
+      actions.appendChild(goBtn);
+      actions.appendChild(editBtn);
+      actions.appendChild(delBtn);
+
+      li.appendChild(info);
+      li.appendChild(actions);
+      savedList.appendChild(li);
+    });
+  }
+
+  function loadForEditing(raffle){
+    eventNameInput.value = raffle.name;
+    numSuplentesInput.value = raffle.numSuplentes;
+    participants = raffle.participants.slice();
+    participantsInput.value = participants.join('\n');
+    renderParticipants();
+    showStatus('Se cargó "' + raffle.name + '" para editar. Acordate de volver a guardarlo.');
+    window.scrollTo(0, 0);
+  }
+
+  btnSaveRaffle.addEventListener('click', function(){
+    var name = eventNameInput.value.trim();
+    if (!name){
+      showStatus('Poné un nombre para el sorteo antes de guardarlo (por ejemplo "Prueba 1").', true);
+      return;
+    }
+    if (participants.length === 0){
+      showStatus('Cargá participantes antes de guardar el sorteo.', true);
+      return;
+    }
+    var numSup = parseInt(numSuplentesInput.value, 10);
+    if (isNaN(numSup) || numSup < 0) numSup = 0;
+
+    var entry = { name: name, participants: participants.slice(), numSuplentes: numSup };
+    var idx = -1;
+    for (var i = 0; i < savedRaffles.length; i++){
+      if (savedRaffles[i].name.toLowerCase() === name.toLowerCase()){ idx = i; break; }
+    }
+    if (idx > -1){
+      savedRaffles[idx] = entry;
+      showStatus('Se actualizó el sorteo "' + name + '".');
+    } else {
+      savedRaffles.push(entry);
+      showStatus('Se guardó el sorteo "' + name + '".');
+    }
+    renderSavedRaffles();
+  });
+
+  btnClearForm.addEventListener('click', function(){
+    participants = [];
+    participantsInput.value = '';
+    eventNameInput.value = '';
+    numSuplentesInput.value = 2;
+    renderParticipants();
+    showStatus('Se vació el formulario.');
+  });
+
+  btnExportAll.addEventListener('click', function(){
+    if (savedRaffles.length === 0){
+      showStatus('Todavía no hay sorteos guardados para exportar.', true);
+      return;
+    }
+    downloadJSON(savedRaffles, 'sorteos-bcr-guardados.json');
+    showStatus('Se exportaron ' + savedRaffles.length + ' sorteo(s) guardado(s).');
+  });
+
+  btnImportAllTrigger.addEventListener('click', function(){ importAllFile.click(); });
+  importAllFile.addEventListener('change', function(){
+    var file = importAllFile.files[0];
+    if (!file) return;
+    readJSONFile(file, function(err, data){
+      if (err){
+        showStatus('El archivo no tiene un formato válido.', true);
+        return;
+      }
+      var list = Array.isArray(data) ? data : null;
+      if (!list){
+        showStatus('El archivo no contiene una lista de sorteos válida.', true);
+        return;
+      }
+      var count = 0;
+      list.forEach(function(r){
+        if (!r || typeof r.name !== 'string' || !Array.isArray(r.participants)) return;
+        var entry = {
+          name: r.name,
+          participants: r.participants,
+          numSuplentes: (typeof r.numSuplentes === 'number') ? r.numSuplentes : 2
+        };
+        var idx = -1;
+        for (var i = 0; i < savedRaffles.length; i++){
+          if (savedRaffles[i].name.toLowerCase() === entry.name.toLowerCase()){ idx = i; break; }
+        }
+        if (idx > -1) savedRaffles[idx] = entry; else savedRaffles.push(entry);
+        count++;
+      });
+      renderSavedRaffles();
+      showStatus('Se importaron ' + count + ' sorteo(s) guardado(s).');
+    });
+    importAllFile.value = '';
+  });
+
+  // ── Vista de sorteo en vivo ───────────────────────────────────────────
+  function resetRevealBox(){
+    revealBox.classList.remove('spinning', 'anticipating');
+    var has = activeLiveRaffle && activeLiveRaffle.participants.length > 0;
+    revealBox.innerHTML = has
+      ? '<span class="reveal-placeholder">Todo listo. Tocá "Realizar sorteo" cuando estés en vivo.</span>'
+      : '<span class="reveal-placeholder">Este sorteo no tiene participantes cargados.</span>';
+  }
+
+  function enterLiveView(raffle){
+    activeLiveRaffle = { name: raffle.name, participants: raffle.participants.slice(), numSuplentes: raffle.numSuplentes };
+    lastDraw = null;
+    isDrawing = false;
+
+    liveRaffleTitle.textContent = raffle.name;
+    var supCount = Math.min(raffle.numSuplentes, Math.max(raffle.participants.length - 1, 0));
+    liveRaffleMeta.textContent = raffle.participants.length + (raffle.participants.length === 1 ? ' participante cargado · ' : ' participantes cargados · ') +
+      supCount + (supCount === 1 ? ' suplente' : ' suplentes');
+
+    winnerCard.classList.remove('show');
+    subsWrap.classList.remove('show');
+    btnCopyResult.style.display = 'none';
+    btnRedoDraw.style.display = 'none';
+    redoNote.style.display = 'none';
+    btnDraw.disabled = false;
+    resetRevealBox();
+
+    setupView.style.display = 'none';
+    liveView.style.display = 'block';
+    window.scrollTo(0, 0);
+  }
+
+  btnBackToSetup.addEventListener('click', function(){
+    liveView.style.display = 'none';
+    setupView.style.display = 'block';
+    window.scrollTo(0, 0);
+  });
+
+  // Genera los tiempos de espera entre cada nombre que se muestra durante
+  // la animación de sorteo. La curva acelera al principio y frena mucho
+  // hacia el final (efecto "ruleta"), para generar más suspenso.
+  function buildRevealDelays(){
+    var totalMs = 6200;
+    var steps = 38;
+    var weights = [];
+    var sum = 0;
+    for (var i = 0; i < steps; i++){
+      var w = Math.pow(i + 1, 2.2);
+      weights.push(w);
+      sum += w;
+    }
+    var delays = [];
+    for (var i = 0; i < steps; i++){
+      delays.push(Math.max(40, Math.round(totalMs * weights[i] / sum)));
+    }
+    return delays;
+  }
+
+  function animateReveal(pool, winner, substitutes, done){
+    if (reduceMotion){
+      done(winner, substitutes);
+      return;
+    }
+    revealBox.classList.add('anticipating');
+    revealBox.textContent = 'Sorteando…';
+    window.setTimeout(function(){
+      revealBox.classList.remove('anticipating');
+      revealBox.classList.add('spinning');
+      var delays = buildRevealDelays();
+      var i = 0;
+      function step(){
+        if (i >= delays.length){
+          revealBox.classList.remove('spinning');
+          revealBox.textContent = winner;
+          done(winner, substitutes);
+          return;
+        }
+        var candidate = pool[Math.floor(Math.random() * pool.length)];
+        revealBox.textContent = candidate;
+        window.setTimeout(step, delays[i]);
+        i++;
+      }
+      step();
+    }, 900);
+  }
+
+  function showResult(winner, substitutes){
+    winnerName.textContent = winner;
+    winnerCard.classList.add('show');
+    substitutesList.innerHTML = '';
+    if (substitutes.length === 0){
+      subsWrap.classList.remove('show');
+    } else {
+      substitutes.forEach(function(name){
+        var li = document.createElement('li');
+        li.textContent = name;
+        substitutesList.appendChild(li);
+      });
+      subsWrap.classList.add('show');
+    }
+    btnCopyResult.style.display = 'inline-block';
+    btnRedoDraw.style.display = 'inline-block';
+    redoNote.style.display = 'block';
+    isDrawing = false;
+    btnDraw.disabled = false;
+  }
+
+  function runDraw(){
+    if (isDrawing) return;
+    if (!activeLiveRaffle || activeLiveRaffle.participants.length === 0){
+      showStatus('Este sorteo no tiene participantes cargados.', true);
+      return;
+    }
+    isDrawing = true;
+    btnDraw.disabled = true;
+    winnerCard.classList.remove('show');
+    subsWrap.classList.remove('show');
+    btnCopyResult.style.display = 'none';
+    btnRedoDraw.style.display = 'none';
+    redoNote.style.display = 'none';
+
+    var numSup = Math.min(Math.max(activeLiveRaffle.numSuplentes, 0), activeLiveRaffle.participants.length - 1);
+    var shuffled = shuffle(activeLiveRaffle.participants);
+    var winner = shuffled[0];
+    var substitutes = shuffled.slice(1, 1 + numSup);
+
+    lastDraw = { winner: winner, substitutes: substitutes };
+    animateReveal(activeLiveRaffle.participants, winner, substitutes, showResult);
+  }
+
+  btnDraw.addEventListener('click', runDraw);
+
+  btnRedoDraw.addEventListener('click', function(){
+    winnerCard.classList.remove('show');
+    subsWrap.classList.remove('show');
+    btnCopyResult.style.display = 'none';
+    btnRedoDraw.style.display = 'none';
+    redoNote.style.display = 'none';
+    resetRevealBox();
+    runDraw();
+  });
+
+  btnCopyResult.addEventListener('click', function(){
+    if (!lastDraw || !activeLiveRaffle) return;
+    var lines = [];
+    lines.push('Sorteo – ' + activeLiveRaffle.name + ' – Bolsa de Comercio de Rosario');
+    lines.push('Ganador/a: ' + lastDraw.winner);
+    lastDraw.substitutes.forEach(function(name, idx){
+      lines.push('Suplente ' + (idx + 1) + ': ' + name);
+    });
+    var text = lines.join('\n');
+    if (navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(text).then(function(){
+        showStatus('Resultado copiado al portapapeles.');
+      }, function(){
+        showStatus('No se pudo copiar automáticamente. Copialo manualmente.', true);
+      });
+    } else {
+      showStatus('El navegador no permite copiar automáticamente.', true);
+    }
+  });
+
+  // ── Estado inicial ───────────────────────────────────────────────────
+  renderParticipants();
+  renderSavedRaffles();
+
+})();
+</script>
+</body>
+</html>
